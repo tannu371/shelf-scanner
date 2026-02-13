@@ -1,112 +1,120 @@
 # Combined .gitignore for ShelfScanner project
 
 # ============================================
-# Backend (Python) - from ShelfScanner
+# General (applies to entire project)
+# ============================================
+.DS_Store
+*.swp
+*.swo
+*~
+
+# ============================================
+# Backend (Python)
 # ============================================
 
 # Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/**/*$py.class
 
 # C extensions
-*.so
+backend/**/*.so
 
 # Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-PIPFILE.lock
+backend/.Python
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.eggs/
+backend/lib/
+backend/lib64/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/share/python-wheels/
+backend/**/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/PIPFILE.lock
 
 # PyInstaller
-*.manifest
-*.spec
+backend/*.manifest
+backend/*.spec
 
 # Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+backend/pip-log.txt
+backend/pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+backend/htmlcov/
+backend/.tox/
+backend/.nox/
+backend/.coverage
+backend/.coverage.*
+backend/.cache
+backend/nosetests.xml
+backend/coverage.xml
+backend/*.cover
+backend/*.py,cover
+backend/.hypothesis/
+backend/.pytest_cache/
+backend/cover/
 
 # Translations
-*.mo
-*.pot
+backend/**/*.mo
+backend/**/*.pot
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# Django/Flask stuff
+backend/**/*.log
+backend/local_settings.py
+backend/db.sqlite3
+backend/db.sqlite3-journal
+backend/instance/
+backend/.webassets-cache
 
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
+# Scrapy stuff
+backend/.scrapy
 
 # Sphinx documentation
-docs/_build/
+backend/docs/_build/
 
 # PyBuilder
-.pybuilder/
-target/
+backend/.pybuilder/
+backend/target/
 
 # Jupyter Notebook
-.ipynb_checkpoints
+backend/.ipynb_checkpoints
+backend/**/*.ipynb_checkpoints
 
 # IPython
-profile_default/
-ipython_config.py
+backend/profile_default/
+backend/ipython_config.py
 
 # pyenv
-.python-version
+backend/.python-version
 
 # pipenv
-Pipfile.lock
+backend/Pipfile.lock
 
 # poetry
-poetry.lock
+backend/poetry.lock
 
 # pdm
-.pdm.toml
+backend/.pdm.toml
 
 # PEP 582
-__pypackages__/
+backend/__pypackages__/
 
 # Celery stuff
-celerybeat-schedule
-celerybeat.pid
+backend/celerybeat-schedule
+backend/celerybeat.pid
 
 # SageMath parsed files
-*.sage.py
+backend/**/*.sage.py
 
 # Environments
 .env
@@ -116,162 +124,158 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+backend/.env
+backend/.venv
+backend/env/
+backend/venv/
+backend/ENV/
+backend/env.bak/
+backend/venv.bak/
 
 # Spyder project settings
-.spyderproject
-.spyproject
+backend/.spyderproject
+backend/.spyproject
 
 # Rope project settings
-.ropeproject
+backend/.ropeproject
 
 # mkdocs documentation
-/site
+backend/site
 
 # mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+backend/.mypy_cache/
+backend/.dmypy.json
+backend/dmypy.json
 
 # Pyre type checker
-.pyre/
+backend/.pyre/
 
 # pytype static type analyzer
-.pytype/
+backend/.pytype/
 
 # Cython debug symbols
-cython_debug/
+backend/cython_debug/
 
-# ML/Data files
-*.npy
-*.h5
-*.pkl
-*.pth
-*.onnx
-runs/
-data/book_covers/
-data/book-dataset/
-data/text_dataset/
-output/
-input/
+# ML/Data files (backend specific)
+backend/**/*.npy
+backend/**/*.h5
+backend/**/*.pkl
+backend/**/*.pth
+backend/**/*.onnx
+backend/runs/
+backend/data/book_covers/
+backend/data/book-dataset/
+backend/data/text_dataset/
+backend/output/
+backend/input/
 
 # ============================================
-# Frontend (Flutter) - from shelf_scanner
+# Frontend (Flutter/Dart)
 # ============================================
 
 # Miscellaneous
-*.class
-*.lock
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.buildlog/
-.history
-.svn/
-migrate_working_dir/
+frontend/**/*.class
+frontend/.buildlog/
+frontend/.history
+frontend/.svn/
+frontend/migrate_working_dir/
 
 # IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
+frontend/**/*.iml
+frontend/**/*.ipr
+frontend/**/*.iws
+frontend/.idea/
 
 # Visual Studio Code related
-.classpath
-.project
-.settings/
-.vscode/
+frontend/.classpath
+frontend/.project
+frontend/.settings/
+frontend/.vscode/
 
 # Flutter/Dart/Pub related
-**/doc/api/
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-build/
-flutter_*.png
-linked_*.ds
-unlinked.ds
-unlinked_spec.ds
+frontend/**/doc/api/
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/.pub-cache/
+frontend/.pub/
+frontend/build/
+frontend/flutter_*.png
+frontend/linked_*.ds
+frontend/unlinked.ds
+frontend/unlinked_spec.ds
 
 # Android related
-**/android/**/gradle-wrapper.jar
-**/android/.gradle
-**/android/captures/
-**/android/gradlew
-**/android/gradlew.bat
-**/android/local.properties
-**/android/**/GeneratedPluginRegistrant.java
-**/android/key.properties
-*.jks
+frontend/android/**/gradle-wrapper.jar
+frontend/android/.gradle
+frontend/android/captures/
+frontend/android/gradlew
+frontend/android/gradlew.bat
+frontend/android/local.properties
+frontend/android/**/GeneratedPluginRegistrant.java
+frontend/android/key.properties
+frontend/android/**/*.jks
 
 # iOS/XCode related
-**/ios/**/*.mode1v3
-**/ios/**/*.mode2v3
-**/ios/**/*.moved-aside
-**/ios/**/*.pbxuser
-**/ios/**/*.perspectivev3
-**/ios/**/*sync/
-**/ios/**/.sconsign.dblite
-**/ios/**/.tags*
-**/ios/**/.vagrant/
-**/ios/**/DerivedData/
-**/ios/**/Icon?
-**/ios/**/Pods/
-**/ios/**/.symlinks/
-**/ios/**/profile
-**/ios/**/xcuserdata
-**/ios/.generated/
-**/ios/Flutter/.last_build_id
-**/ios/Flutter/App.framework
-**/ios/Flutter/Flutter.framework
-**/ios/Flutter/Flutter.podspec
-**/ios/Flutter/Generated.xcconfig
-**/ios/Flutter/ephemeral
-**/ios/Flutter/app.flx
-**/ios/Flutter/app.zip
-**/ios/Flutter/flutter_assets/
-**/ios/Flutter/flutter_export_environment.sh
-**/ios/ServiceDefinitions.json
-**/ios/Runner/GeneratedPluginRegistrant.*
+frontend/ios/**/*.mode1v3
+frontend/ios/**/*.mode2v3
+frontend/ios/**/*.moved-aside
+frontend/ios/**/*.pbxuser
+frontend/ios/**/*.perspectivev3
+frontend/ios/**/*sync/
+frontend/ios/**/.sconsign.dblite
+frontend/ios/**/.tags*
+frontend/ios/**/.vagrant/
+frontend/ios/**/DerivedData/
+frontend/ios/**/Icon?
+frontend/ios/**/Pods/
+frontend/ios/**/.symlinks/
+frontend/ios/**/profile
+frontend/ios/**/xcuserdata
+frontend/ios/.generated/
+frontend/ios/Flutter/.last_build_id
+frontend/ios/Flutter/App.framework
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/ios/Flutter/Generated.xcconfig
+frontend/ios/Flutter/ephemeral
+frontend/ios/Flutter/app.flx
+frontend/ios/Flutter/app.zip
+frontend/ios/Flutter/flutter_assets/
+frontend/ios/Flutter/flutter_export_environment.sh
+frontend/ios/ServiceDefinitions.json
+frontend/ios/Runner/GeneratedPluginRegistrant.*
 
 # macOS
-**/macos/Flutter/GeneratedPluginRegistrant.swift
-**/macos/Flutter/ephemeral
+frontend/macos/Flutter/GeneratedPluginRegistrant.swift
+frontend/macos/Flutter/ephemeral
 
 # Linux
-**/linux/flutter/generated_plugin_registrant.cc
-**/linux/flutter/generated_plugin_registrant.h
-**/linux/flutter/generated_plugins.cmake
+frontend/linux/flutter/generated_plugin_registrant.cc
+frontend/linux/flutter/generated_plugin_registrant.h
+frontend/linux/flutter/generated_plugins.cmake
 
 # Windows
-**/windows/flutter/generated_plugin_registrant.cc
-**/windows/flutter/generated_plugin_registrant.h
-**/windows/flutter/generated_plugins.cmake
+frontend/windows/flutter/generated_plugin_registrant.cc
+frontend/windows/flutter/generated_plugin_registrant.h
+frontend/windows/flutter/generated_plugins.cmake
 
 # Coverage
-coverage/
+frontend/coverage/
 
 # Symbols
-app.*.symbols
+frontend/app.*.symbols
 
-# Exceptions to above rules.
-!**/ios/**/default.mode1v3
-!**/ios/**/default.mode2v3
-!**/ios/**/default.pbxuser
-!**/ios/**/default.perspectivev3
-!/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
-!/dev/ci/**/Gemfile.lock
+# Exceptions to above rules
+!frontend/ios/**/default.mode1v3
+!frontend/ios/**/default.mode2v3
+!frontend/ios/**/default.pbxuser
+!frontend/ios/**/default.perspectivev3
 
 # ============================================
-# General
+# IDE (applies to entire project)
 # ============================================
-.DS_Store
-*.swp
-*.swo
-*~
-.vscode/
 .idea/
+.vscode/
+*.iml

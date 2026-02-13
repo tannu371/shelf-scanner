@@ -1,0 +1,18 @@
+fastapi[standard]
+uvicorn[standard]
+
+python-dotenv # For loading API keys from .env
+xmltodict # For easier XML parsing (WorldCat)
+
+requests
+httpx
+
+ultralytics
+
+paddleocr
+paddlepaddle
+
+wordfreq
+rapidfuzz
+
+libgen-scraper

@@ -1,0 +1,67 @@
+# ┌─────────────────────────────────────────────────────────────┐
+# │  ShelfScanner — Docker Compose                              │
+# │  Runs: PostgreSQL+pgvector  +  FastAPI backend              │
+# │                                                             │
+# │  Quick start:                                               │
+# │    docker compose up --build                                │
+# │    API → http://localhost:8000/docs                         │
+# └─────────────────────────────────────────────────────────────┘
+
+services:
+
+  # ── PostgreSQL with pgvector extension ──────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: shelfscanner-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shelfscanner
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shelfscanner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI backend ──────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: shelfscanner-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: shelfscanner
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      # API Keys (set in .env)
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      # SBERT model (cached via volume for faster restarts)
+      SBERT_MODEL: sentence-transformers/all-mpnet-base-v2
+      # Cache dirs
+      TRANSFORMERS_CACHE: /root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - hf_cache:/root/.cache/huggingface   # persist model weights across restarts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  pgdata:
+  hf_cache:

@@ -1,100 +1,361 @@
 # ShelfScanner/app/api/main.py
-from fastapi import FastAPI, HTTPException
-from dotenv import load_dotenv
-import os
 import asyncio
-from typing import Dict, Any
+import base64
+import logging
+import os
+from typing import Any, Dict, List, Optional
 
-# --- Import your data pipeline functions ---
-# We use '...' to go up one directory from 'api' to 'app'
-# then into 'data_pipeline'
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
 from ..data_pipeline.api_clients import (
     fetch_google_books_data,
     fetch_open_library_data,
     fetch_worldcat_data,
-    fetch_goodreads_data
+    fetch_goodreads_data,
 )
+from ..services.text_recoginition import extract_text_from_bytes, extract_raw_text
+from ..services.text_reconstruction import BookParser
+from ..services.embedding_service import generate_book_embedding, generate_user_embedding
+from ...db.database import init_db, close_db, get_pool
 
-# Load environment variables from .env file
 load_dotenv()
+logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
 app = FastAPI(
-    title="ShelfScanner Backend API",
-    description="API for book metadata, recommendations, and cover scanning."
+    title="ShelfScanner API",
+    description="Book detection, metadata retrieval, and personalised recommendations.",
+    version="1.0.0",
 )
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to the ShelfScanner API! Head to /docs for API details."}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# ---------------------------------------------------------------------------
+# Lifecycle — DB pool + model warm-up
+# ---------------------------------------------------------------------------
+@app.on_event("startup")
+async def startup():
+    await init_db()
+    logger.info("Startup complete.")
 
-# --- NEW ENDPOINT FOR STEP: Backend Testing ---
+@app.on_event("shutdown")
+async def shutdown():
+    await close_db()
 
-@app.get("/metadata/{isbn}", response_model=Dict[str, Any])
-async def get_live_book_metadata(isbn: str):
-    """
-    Fetches complete, live book metadata for a given ISBN
-    by querying all external APIs in parallel.
-    
-    This endpoint confirms that all data sources are accessible 
-    and functional before building the UI.
-    """
-    print(f"Received request for live metadata: {isbn}")
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+class ScanRequest(BaseModel):
+    """Payload sent from Flutter after on-device YOLO detection crops a spine."""
+    image_b64: str           # Base64-encoded image of the cropped book spine
+    user_id: Optional[str] = None
 
-    # 1. Fetch from all sources concurrently (just like in the dataset generator)
-    # This demonstrates the core logic is working in a live API environment.
-    try:
-        google_task = fetch_google_books_data(isbn)
-        openlib_task = fetch_open_library_data(isbn)
-        worldcat_task = fetch_worldcat_data(isbn)
-        goodreads_task = fetch_goodreads_data(isbn)
+class SearchRequest(BaseModel):
+    """Direct text search (title / author query from OCR)."""
+    ocr_text: str
+    user_id: Optional[str] = None
 
-        google_data, openlib_data, worldcat_data, goodreads_data = await asyncio.gather(
-            google_task, openlib_task, worldcat_task, goodreads_task
-        )
-    except Exception as e:
-        print(f"Error during API calls: {e}")
-        raise HTTPException(status_code=503, detail=f"An error occurred while contacting external APIs: {e}")
+class FeedbackRequest(BaseModel):
+    isbn: str
+    action: str              # 'confirm' | 'like' | 'skip'
+    user_id: Optional[str] = None
+    ocr_raw_text: Optional[str] = None
+    spine_image_b64: Optional[str] = None
 
-    # 2. Initialize the final, normalized dictionary
-    final_data = {
-        'isbn': isbn, 'title': '', 'authors': [], 'publisher': '', 'year': '',
-        'description': '', 'categories': [], 'cover_url': '',
-        'ol_average_rating': None, 'ol_rating_count': None,
-        'goodreads_rating': None, 'goodreads_rating_count': None
+class BookResult(BaseModel):
+    isbn: str
+    title: str
+    authors: List[str]
+    publisher: str
+    year: str
+    description: str
+    categories: List[str]
+    cover_url: str
+    avg_rating: Optional[float]
+    rating_count: Optional[int]
+    match_score: Optional[float] = None   # similarity score for recommendations
+
+# ---------------------------------------------------------------------------
+# Helper — merge + normalise external API data
+# ---------------------------------------------------------------------------
+async def _fetch_and_merge_metadata(isbn: str) -> Dict[str, Any]:
+    google, openlib, worldcat, goodreads = await asyncio.gather(
+        fetch_google_books_data(isbn),
+        fetch_open_library_data(isbn),
+        fetch_worldcat_data(isbn),
+        fetch_goodreads_data(isbn),
+    )
+    title = google.get("title") or openlib.get("title") or worldcat.get("title", "")
+    authors = sorted(set(
+        google.get("authors", []) + openlib.get("authors", []) + worldcat.get("authors", [])
+    ))
+    publisher = google.get("publisher") or (openlib.get("publishers") or [""])[0]
+    description = google.get("description") or openlib.get("description", "")
+    year = str(
+        worldcat.get("year") or google.get("publishedDate") or openlib.get("publishDate", "")
+    ).split("-")[0]
+    categories = sorted(set(google.get("categories", []) + openlib.get("categories", [])))
+    cover_url = google.get("coverURL") or openlib.get("coverURL", "")
+
+    return {
+        "isbn": isbn, "title": title, "authors": authors,
+        "publisher": publisher, "year": year, "description": description,
+        "categories": categories, "cover_url": cover_url,
+        "avg_rating": openlib.get("ol_average_rating") or goodreads.get("goodreads_rating"),
+        "rating_count": openlib.get("ol_rating_count") or goodreads.get("goodreads_rating_count"),
     }
 
-    # 3. Cascade and merge data (same logic as your pipeline)
-    final_data['title'] = google_data.get('title') or openlib_data.get('title') or worldcat_data.get('title', '')
 
-    # Authors (Combine all, then deduplicate)
-    authors = google_data.get('authors', []) + openlib_data.get('authors', []) + worldcat_data.get('authors', [])
-    final_data['authors'] = sorted(list(set(authors))) # Get unique authors
-
-    final_data['publisher'] = google_data.get('publisher') or (openlib_data.get('publishers') and openlib_data['publishers'][0]) or ''
-    
-    final_data['description'] = google_data.get('description', '') or openlib_data.get('description', '') or ''
-
-    year_str = str(worldcat_data.get('year') or google_data.get('publishedDate') or openlib_data.get('publishDate', ''))
-    if year_str:
-        final_data['year'] = year_str.split('-')[0]
-
-    categories = google_data.get('categories', []) + openlib_data.get('categories', [])
-    final_data['categories'] = sorted(list(set(categories)))
-
-    final_data['cover_url'] = google_data.get('coverURL') or openlib_data.get('coverURL', '')
-
-    final_data['ol_average_rating'] = openlib_data.get('ol_average_rating')
-    final_data['ol_rating_count'] = openlib_data.get('ol_rating_count')
-
-    final_data.update(goodreads_data)
-
-    # 4. Check if we found anything at all
-    if not final_data['title']:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Metadata not found for ISBN {isbn}. All external APIs returned no data."
+async def _upsert_book(meta: Dict[str, Any]) -> None:
+    """Insert (or update) a book row and generate its embedding."""
+    pool = await get_pool()
+    embedding = generate_book_embedding(meta["description"], meta["categories"])
+    async with pool.connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO books
+                (isbn, title, authors, publisher, year, description,
+                 categories, cover_url, avg_rating, rating_count, embedding)
+            VALUES
+                (%(isbn)s, %(title)s, %(authors)s, %(publisher)s, %(year)s,
+                 %(description)s, %(categories)s, %(cover_url)s,
+                 %(avg_rating)s, %(rating_count)s, %(embedding)s)
+            ON CONFLICT (isbn) DO UPDATE SET
+                title        = EXCLUDED.title,
+                authors      = EXCLUDED.authors,
+                publisher    = EXCLUDED.publisher,
+                year         = EXCLUDED.year,
+                description  = EXCLUDED.description,
+                categories   = EXCLUDED.categories,
+                cover_url    = EXCLUDED.cover_url,
+                avg_rating   = EXCLUDED.avg_rating,
+                rating_count = EXCLUDED.rating_count,
+                embedding    = EXCLUDED.embedding,
+                updated_at   = NOW()
+            """,
+            {**meta, "embedding": embedding},
         )
 
-    # 5. Return the complete, merged data
-    return final_data
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/", tags=["Health"])
+async def root():
+    return {"status": "ok", "message": "ShelfScanner API — see /docs"}
+
+
+@app.get("/metadata/{isbn}", response_model=BookResult, tags=["Books"])
+async def get_metadata(isbn: str):
+    """
+    Fetch and merge book metadata for a given ISBN.
+    Upserts the result (with embedding) into the database.
+    """
+    meta = await _fetch_and_merge_metadata(isbn)
+    if not meta["title"]:
+        raise HTTPException(404, f"No metadata found for ISBN {isbn}")
+    asyncio.create_task(_upsert_book(meta))   # persist in background
+    return meta
+
+
+@app.post("/scan", response_model=List[BookResult], tags=["Books"])
+async def scan_spine(req: ScanRequest):
+    """
+    Accept a base64-encoded book spine image, run OCR,
+    parse title/author, and return the best-matching book candidates.
+
+    Flutter flow:
+        YOLO detects spine → crop → send here → receive book candidates
+    """
+    try:
+        image_bytes = base64.b64decode(req.image_b64)
+    except Exception:
+        raise HTTPException(400, "Invalid base64 image data")
+
+    # 1. OCR
+    ocr_data = extract_text_from_bytes(image_bytes)
+    parser = BookParser()
+    parsed = parser.parse_spine(ocr_data)
+    combined = parsed["combined_query"]
+
+    if not combined.strip():
+        raise HTTPException(422, "OCR returned no readable text from the image")
+
+    # 2. DB fuzzy search first (fast path)
+    results = await _db_text_search(combined, limit=5)
+
+    # 3. Fallback to Google Books if DB miss (slow path)
+    if not results:
+        results = await _google_text_search(combined)
+
+    if not results:
+        raise HTTPException(404, "No matching books found for the scanned spine")
+
+    return results
+
+
+@app.post("/search", response_model=List[BookResult], tags=["Books"])
+async def search_books(req: SearchRequest):
+    """
+    Text-based book search.
+    Used when OCR text is already extracted on-device (e.g. CRAFT + Tesseract).
+    """
+    if not req.ocr_text.strip():
+        raise HTTPException(400, "ocr_text must not be empty")
+
+    results = await _db_text_search(req.ocr_text, limit=5)
+    if not results:
+        results = await _google_text_search(req.ocr_text)
+    if not results:
+        raise HTTPException(404, "No matching books found")
+    return results
+
+
+@app.get("/recommend", response_model=List[BookResult], tags=["Recommendations"])
+async def get_recommendations(
+    isbn: str = Query(..., description="ISBN of the seed book"),
+    user_id: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """
+    Return Top-K books similar to the given ISBN using pgvector KNN cosine search.
+    """
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        # Get the source book's embedding
+        row = await conn.fetchrow(
+            "SELECT embedding FROM books WHERE isbn = $1", isbn
+        )
+        if not row or row["embedding"] is None:
+            # Try to fetch + store first
+            try:
+                meta = await _fetch_and_merge_metadata(isbn)
+                await _upsert_book(meta)
+            except Exception:
+                raise HTTPException(404, f"Book {isbn} not found and could not be fetched")
+            row = await conn.fetchrow(
+                "SELECT embedding FROM books WHERE isbn = $1", isbn
+            )
+            if not row:
+                raise HTTPException(404, f"Could not generate embedding for ISBN {isbn}")
+
+        embedding = row["embedding"]
+
+        # pgvector KNN — cosine similarity, exclude the seed book itself
+        rows = await conn.fetch(
+            """
+            SELECT isbn, title, authors, publisher, year, description,
+                   categories, cover_url, avg_rating, rating_count,
+                   1 - (embedding <=> $1::vector) AS similarity
+            FROM books
+            WHERE isbn != $2
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> $1::vector
+            LIMIT $3
+            """,
+            embedding, isbn, limit,
+        )
+
+    return [
+        BookResult(
+            isbn=r["isbn"], title=r["title"], authors=r["authors"],
+            publisher=r["publisher"], year=r["year"],
+            description=r["description"], categories=r["categories"],
+            cover_url=r["cover_url"], avg_rating=r["avg_rating"],
+            rating_count=r["rating_count"],
+            match_score=round(float(r["similarity"]), 4),
+        )
+        for r in rows
+    ]
+
+
+@app.post("/log_feedback", tags=["Feedback"])
+async def log_feedback(req: FeedbackRequest):
+    """
+    Log a user action (confirm / like / skip) for HITL model retraining.
+    """
+    if req.action not in ("confirm", "like", "skip"):
+        raise HTTPException(400, "action must be 'confirm', 'like', or 'skip'")
+
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO feedback_log
+                (user_id, isbn, action, ocr_raw_text, spine_image_b64)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            req.user_id, req.isbn, req.action,
+            req.ocr_raw_text, req.spine_image_b64,
+        )
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Internal search helpers
+# ---------------------------------------------------------------------------
+
+async def _db_text_search(query: str, limit: int = 5) -> List[BookResult]:
+    """Fast path — PostgreSQL full-text search."""
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT isbn, title, authors, publisher, year, description,
+                   categories, cover_url, avg_rating, rating_count
+            FROM books
+            WHERE to_tsvector('english', title || ' ' || array_to_string(authors, ' '))
+                  @@ plainto_tsquery('english', $1)
+            LIMIT $2
+            """,
+            query, limit,
+        )
+    return [BookResult(**dict(r), match_score=None) for r in rows]
+
+
+async def _google_text_search(query: str) -> List[BookResult]:
+    """Slow path — Google Books API text search, upserts results into DB."""
+    import httpx
+    api_key = os.getenv("GOOGLE_BOOKS_API_KEY", "")
+    url = "https://www.googleapis.com/books/v1/volumes"
+    params = {"q": query, "maxResults": 5, "key": api_key}
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(url, params=params)
+    if resp.status_code != 200:
+        return []
+
+    items = resp.json().get("items", [])
+    results = []
+    for item in items:
+        info = item.get("volumeInfo", {})
+        isbns = [i["identifier"] for i in info.get("industryIdentifiers", [])
+                 if i["type"] in ("ISBN_13", "ISBN_10")]
+        if not isbns:
+            continue
+        isbn = isbns[0]
+        meta = {
+            "isbn": isbn,
+            "title": info.get("title", ""),
+            "authors": info.get("authors", []),
+            "publisher": info.get("publisher", ""),
+            "year": (info.get("publishedDate") or "").split("-")[0],
+            "description": info.get("description", ""),
+            "categories": info.get("categories", []),
+            "cover_url": (info.get("imageLinks") or {}).get("thumbnail", ""),
+            "avg_rating": info.get("averageRating"),
+            "rating_count": info.get("ratingsCount"),
+        }
+        asyncio.create_task(_upsert_book(meta))
+        results.append(BookResult(**meta, match_score=None))
+    return results

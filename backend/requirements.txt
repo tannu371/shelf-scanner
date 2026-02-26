@@ -1,18 +1,34 @@
+# ─── Web Framework ──────────────────────────────────────────────
 fastapi[standard]
 uvicorn[standard]
 
-python-dotenv # For loading API keys from .env
-xmltodict # For easier XML parsing (WorldCat)
+# ─── Environment & Config ────────────────────────────────────────
+python-dotenv
 
-requests
+# ─── HTTP Clients ────────────────────────────────────────────────
 httpx
+requests
+xmltodict        # WorldCat XML parsing
 
-ultralytics
+# ─── Database ────────────────────────────────────────────────────
+psycopg[binary]  # psycopg3 async driver
+psycopg-pool     # async connection pooling
+pgvector         # pgvector Python integration
 
+# ─── NLP / Embeddings ────────────────────────────────────────────
+sentence-transformers
+
+# ─── Computer Vision / OCR ───────────────────────────────────────
+ultralytics      # YOLOv11 training & inference
 paddleocr
 paddlepaddle
+Pillow
+numpy
+opencv-python-headless
 
-wordfreq
+# ─── Text Processing ─────────────────────────────────────────────
 rapidfuzz
+wordfreq
 
+# ─── Dataset Tools ───────────────────────────────────────────────
 libgen-scraper

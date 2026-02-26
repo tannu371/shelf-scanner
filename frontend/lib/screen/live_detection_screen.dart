@@ -203,13 +203,13 @@ class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 TextButton(
-                    onPressed: () {},
+                    onPressed: () => setState(() => mode = 0),
                     child: Text('Photo',
                         style: TextStyle(
                             color: mode == 0 ? Colors.yellow : Colors.white,
                             fontWeight: FontWeight.bold))),
                 TextButton(
-                    onPressed: () {},
+                    onPressed: () => setState(() => mode = 1),
                     child: Text('Video',
                         style: TextStyle(
                             color: mode == 1 ? Colors.yellow : Colors.white,
@@ -357,15 +357,6 @@ class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
     });
   }
 
-  // Mode selection handlers (Photo/Video)
+  // Mode selection
   int mode = 0; // 0: Photo, 1: Video
-  void onPhotoModeSelected() {
-    setState(() {
-      if (mode != 0) {
-        mode = 0;
-      } else {
-        mode = 1;
-      }
-    });
-  }
 }

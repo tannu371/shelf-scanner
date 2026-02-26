@@ -1,95 +1,94 @@
-# ShelfScanner - AI Powered Book Recommendation System
+# ShelfScanner 📚
 
-A full-stack application that uses AI to scan book shelves, detect book spines, and provide intelligent book recommendations.
+> AI-powered book shelf scanner — point your camera at a shelf, get instant book details and personalised "books like X" recommendations.
+
+## How It Works
+
+```
+📱 Camera Scan
+    → YOLOv11 (on-device TFLite) detects book spines
+    → Cropped spine image sent to backend
+    → PaddleOCR extracts title + author text
+    → PostgreSQL fast-path search (or Google Books fallback)
+    → SBERT embeddings + pgvector KNN → recommendations
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Mobile app | Flutter (Dart) |
+| On-device detection | YOLOv11 TFLite |
+| Backend API | FastAPI (Python 3.10) |
+| OCR | PaddleOCR |
+| Embeddings | SentenceTransformer `all-mpnet-base-v2` |
+| Vector search | PostgreSQL + pgvector (HNSW index) |
+| Containerisation | Docker + Docker Compose |
 
 ## Project Structure
 
 ```
-shelf-scanner-merged/
-├── backend/          # Python FastAPI backend with ML models
-├── frontend/         # Flutter mobile/web application
-└── README.md         # This file
+shelf-scanner/
+├── backend/                # FastAPI backend
+│   ├── app/
+│   │   ├── api/main.py     # All API endpoints
+│   │   ├── services/       # OCR, embeddings, text parsing
+│   │   └── data_pipeline/  # External API clients (Google Books etc.)
+│   ├── db/
+│   │   ├── schema.sql      # PostgreSQL + pgvector schema
+│   │   └── database.py     # Async connection pool
+│   ├── Dockerfile
+│   ├── docker-entrypoint.sh
+│   └── requirements.txt
+├── frontend/               # Flutter app
+│   ├── lib/
+│   │   ├── api/            # HTTP client (ApiService)
+│   │   ├── screen/         # Home, LiveDetection, Preview screens
+│   │   └── widgets/        # BookResultSheet + nav widgets
+│   └── assets/models/      # TFLite model + labels
+├── docker-compose.yml      # One-command stack
+└── QUICKSTART.md
 ```
 
-## Backend (Python/FastAPI)
+## Quick Start (Docker — recommended)
 
-The backend handles book spine detection using YOLO models, OCR for text extraction, and book recommendations.
-
-### Setup
-
-1. Create and activate conda environment:
 ```bash
-cd backend
-conda create -n shelfscanner python=3.10 -y
-conda activate shelfscanner
-conda install ipykernel
-python3 -m ipykernel install --user --name shelfscanner --display-name "Python (shelfscanner)"
+# 1. Set up environment
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your GOOGLE_BOOKS_API_KEY
+
+# 2. Launch the full stack
+docker compose up --build
+# API docs → http://localhost:8000/docs
+
+# 3. Run the Flutter app
+cd frontend && flutter pub get
+flutter run                                       # Android emulator
+flutter run --dart-define=API_BASE_URL=http://YOUR_LAN_IP:8000   # physical device
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Health check |
+| `GET` | `/metadata/{isbn}` | Fetch merged book metadata |
+| `POST` | `/scan` | Base64 spine image → book candidates |
+| `POST` | `/search` | OCR text → book candidates |
+| `GET` | `/recommend?isbn=` | Top-K similar books (pgvector KNN) |
+| `POST` | `/log_feedback` | HITL feedback (confirm/like/skip) |
+
+## Database Schema
+
+```
+books        — isbn, title, authors, embedding vector(768)  [HNSW index]
+users        — user_id, preferences, embedding vector(768)
+feedback_log — isbn, action, ocr_raw_text, spine_image_b64  [HITL pipeline]
 ```
 
-3. Run the backend:
-```bash
-python app/main.py
-```
+## Development (without Docker)
 
-### Features
-- Book spine detection using YOLO
-- OCR for text extraction from book spines
-- Book recommendation engine
-- RESTful API endpoints
-
-## Frontend (Flutter)
-
-The frontend is a cross-platform Flutter application for iOS, Android, and Web.
-
-### Setup
-
-1. Install Flutter: https://docs.flutter.dev/get-started/install
-
-2. Install dependencies:
-```bash
-cd frontend
-flutter pub get
-```
-
-3. Run the application:
-```bash
-flutter run
-```
-
-### Supported Platforms
-- iOS
-- Android
-- Web
-- macOS
-- Linux
-- Windows
-
-## Development
-
-### Backend Development
-- Main application: `backend/app/main.py`
-- API routes: `backend/app/api/`
-- ML models: `backend/app/models/`
-- Data pipeline: `backend/app/data_pipeline/`
-
-### Frontend Development
-- Main entry: `frontend/lib/main.dart`
-- Screens: `frontend/lib/screen/`
-- Widgets: `frontend/lib/widgets/`
-- API integration: `frontend/lib/api/`
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+See [QUICKSTART.md](QUICKSTART.md) for local setup instructions.
 
 ## License
 

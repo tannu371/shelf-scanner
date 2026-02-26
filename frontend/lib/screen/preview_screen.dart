@@ -4,6 +4,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_vision/flutter_vision.dart';
 import 'package:gal/gal.dart';
+import 'package:shelf_scanner/api/api_service.dart';
+import 'package:shelf_scanner/widgets/book_result_sheet.dart';
 
 class PreviewScreen extends StatefulWidget {
   final XFile imageFile;
@@ -21,6 +23,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   double imageHeight = 1.0;
   double imageWidth = 1.0;
+
+  // API state
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -58,39 +63,30 @@ class _PreviewScreenState extends State<PreviewScreen> {
   Widget build(BuildContext context) {
     double totalHeight = MediaQuery.of(context).size.height;
     double statusBarHeight = MediaQuery.of(context).padding.top;
-    double appBarHeight = kToolbarHeight; // Default is 56.0
-    double bottomNavBarHeight = kBottomNavigationBarHeight; // Default is 56.0
+    double appBarHeight = kToolbarHeight;
+    double bottomNavBarHeight = kBottomNavigationBarHeight;
 
     double bodyHeight =
         totalHeight - statusBarHeight - appBarHeight - bottomNavBarHeight;
     Size size = MediaQuery.of(context).size;
 
-  List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
+    List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
       if (yoloResults.isEmpty) return [];
 
-      // Use the actual height available to the Stack (the body height)
-      // We use the screen height provided to the function, but we must
-      // ensure we are measuring the same area the Image.file occupies.
       double availableHeight = bodyHeight;
       double availableWidth = screen.width;
 
-      // 1. Calculate the scaling factor (BoxFit.contain logic)
       double scaleX = availableWidth / imageWidth;
       double scaleY = availableHeight / imageHeight;
       double scale = (scaleX < scaleY) ? scaleX : scaleY;
 
-      // 2. Calculate the scaled dimensions of the image
       double scaledWidth = imageWidth * scale;
       double scaledHeight = imageHeight * scale;
 
-      // 3. Calculate the letterboxing offsets
-      // These center the boxes over the 'Fit.contain' image
       double offsetX = (availableWidth - scaledWidth) / 2;
       double offsetY = (availableHeight - scaledHeight) / 2;
 
       return yoloResults.map((result) {
-        // result["box"] = [x1, y1, x2, y2, confidence]
-        // Apply scale and then add the offset to align with the centered image
         double x1 = result["box"][0] * scale + offsetX;
         double y1 = result["box"][1] * scale + offsetY;
         double width = (result["box"][2] - result["box"][0]) * scale;
@@ -156,19 +152,65 @@ class _PreviewScreenState extends State<PreviewScreen> {
         children: [
           const Spacer(),
           Expanded(
-            child: ElevatedButton(
+            child: ElevatedButton.icon(
+              icon: _isSearching
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.black),
+                    )
+                  : const Icon(Icons.auto_awesome),
+              label: Text(_isSearching ? 'Searching…' : 'Get Recommendation'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black,
               ),
-              onPressed: () {
-                // Recommendation Logic
-                throw ("Get Recommendations Clicked");
-              },
-              child: const Text("Get Recommendation"),
+              onPressed: _isSearching ? null : _getRecommendation,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Core: send spine image to backend → show results ─────────────────────
+  Future<void> _getRecommendation() async {
+    setState(() => _isSearching = true);
+
+    try {
+      final imageBytes = await File(widget.imageFile.path).readAsBytes();
+      final results = await ApiService.scanSpine(imageBytes);
+
+      if (!mounted) return;
+
+      if (results.isEmpty) {
+        _showError('No matching book found. Try a clearer photo.');
+        return;
+      }
+
+      // Show the first (best) match — user can scroll to similar books inside
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => BookResultSheet(book: results.first),
+      );
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
+    } catch (e) {
+      if (mounted) _showError('Failed to reach the server. Is it running?');
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

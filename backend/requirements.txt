@@ -20,11 +20,14 @@ sentence-transformers
 
 # ─── Computer Vision / OCR ───────────────────────────────────────
 ultralytics      # YOLOv11 training & inference
-paddleocr
-paddlepaddle
+paddleocr==2.9.1
+paddlepaddle==2.6.2
 Pillow
 numpy
 opencv-python-headless
+# pin transitive deps to avoid urllib3 / charset-normalizer conflicts
+urllib3>=1.25.3,<3
+charset-normalizer>=2,<4
 
 # ─── Text Processing ─────────────────────────────────────────────
 rapidfuzz

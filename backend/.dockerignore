@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Jupyter / dev artifacts
+*.ipynb
+.ipynb_checkpoints/
+
+# Test & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Env files (NOT needed inside image)
+.env
+.env.*
+
+# Logs
+*.log
+
+# Large model / data dirs that should NOT be baked into the image
+*.pt
+*.pth
+*.onnx
+*.pkl
+datasets/
+data/
+models/

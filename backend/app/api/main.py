@@ -16,10 +16,10 @@ from ..data_pipeline.api_clients import (
     fetch_worldcat_data,
     fetch_goodreads_data,
 )
-from ..services.text_recoginition import extract_text_from_bytes, extract_raw_text
+# text_recoginition is lazy-imported in /scan to avoid paddleocr loading at startup
 from ..services.text_reconstruction import BookParser
 from ..services.embedding_service import generate_book_embedding, generate_user_embedding
-from ...db.database import init_db, close_db, get_pool
+from ..db.database import init_db, close_db, get_pool
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -183,7 +183,8 @@ async def scan_spine(req: ScanRequest):
     except Exception:
         raise HTTPException(400, "Invalid base64 image data")
 
-    # 1. OCR
+    # 1. OCR — lazy import so PaddleOCR doesn't load at startup
+    from ..services.text_recoginition import extract_text_from_bytes  # noqa: PLC0415
     ocr_data = extract_text_from_bytes(image_bytes)
     parser = BookParser()
     parsed = parser.parse_spine(ocr_data)

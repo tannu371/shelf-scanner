@@ -51,6 +51,8 @@ services:
       SBERT_MODEL: sentence-transformers/all-mpnet-base-v2
       # Cache dirs
       TRANSFORMERS_CACHE: /root/.cache/huggingface
+      # Disable PaddleX internet connectivity check (avoids startup crash)
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
     depends_on:
       db:
         condition: service_healthy

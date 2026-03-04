@@ -7,6 +7,8 @@ FROM python:3.10-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libglib2.0-0 \
+        libgl1 \
+        libgomp1 \
         libsm6 \
         libxrender1 \
         libxext6 \
@@ -25,6 +27,8 @@ FROM python:3.10-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
+        libgl1 \
+        libgomp1 \
         libsm6 \
         libxrender1 \
         libxext6 \
@@ -45,7 +49,11 @@ COPY . .
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
+
+
 EXPOSE 8000
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Single worker: PaddleOCR is CPU-heavy; multiple forked workers race on model download
+# and don't improve throughput for this workload.
+CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

@@ -2,14 +2,16 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_vision/flutter_vision.dart';
 import 'package:gal/gal.dart';
+import 'package:image/image.dart' as img;
 import 'package:shelf_scanner/api/api_service.dart';
+import 'package:shelf_scanner/services/yolo_service.dart';
 import 'package:shelf_scanner/widgets/book_result_sheet.dart';
+
 
 class PreviewScreen extends StatefulWidget {
   final XFile imageFile;
-  final FlutterVision visionModel;
+  final YoloService visionModel;
 
   const PreviewScreen(
       {super.key, required this.imageFile, required this.visionModel});
@@ -45,13 +47,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
     final image = await decodeImageFromList(byte);
     imageHeight = image.height.toDouble();
     imageWidth = image.width.toDouble();
-    final result = await widget.visionModel.yoloOnImage(
+    final result = await widget.visionModel.runOnImage(
         bytesList: byte,
         imageHeight: image.height,
         imageWidth: image.width,
         iouThreshold: 0.8,
-        confThreshold: 0.5,
-        classThreshold: 0.5);
+        confThreshold: 0.5);
     if (result.isNotEmpty) {
       setState(() {
         yoloResults = result;
@@ -147,28 +148,51 @@ class _PreviewScreenState extends State<PreviewScreen> {
           ),
         ),
         ...displayBoxesAroundRecognizedObjects(size),
+        // Full-screen loading overlay while fetching recommendations
+        if (_isSearching)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    'Getting details...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ]),
       bottomNavigationBar: Row(
         children: [
           const Spacer(),
-          Expanded(
-            child: ElevatedButton.icon(
-              icon: _isSearching
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black),
-                    )
-                  : const Icon(Icons.auto_awesome),
-              label: Text(_isSearching ? 'Searching…' : 'Get Recommendation'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Expanded(
+              child: ElevatedButton.icon(
+                icon: _isSearching
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Icon(Icons.auto_awesome),
+                label: Text(_isSearching ? 'Searching…' : 'Get Recommendation'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: _isSearching ? null : _getRecommendation,
               ),
-              onPressed: _isSearching ? null : _getRecommendation,
             ),
           ),
+          const Spacer(),
         ],
       ),
     );
@@ -180,11 +204,47 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
     try {
       final imageBytes = await File(widget.imageFile.path).readAsBytes();
-      final results = await ApiService.scanSpine(imageBytes);
+
+      List<BookResult> allResults = [];
+
+      if (yoloResults.isNotEmpty) {
+        // Crop each detected spine and scan individually so PaddleOCR
+        // receives a clean single-spine image (not a multi-spine shelf photo).
+        final decoded = img.decodeImage(imageBytes);
+        if (decoded != null) {
+          final seen = <String>{};
+          for (final box in yoloResults) {
+            // box[0]=x1, [1]=y1, [2]=x2, [3]=y2 in original image pixels
+            final x1 = (box['box'][0] as double).clamp(0.0, imageWidth - 1).toInt();
+            final y1 = (box['box'][1] as double).clamp(0.0, imageHeight - 1).toInt();
+            final x2 = (box['box'][2] as double).clamp(x1 + 1.0, imageWidth).toInt();
+            final y2 = (box['box'][3] as double).clamp(y1 + 1.0, imageHeight).toInt();
+
+            final crop = img.copyCrop(decoded,
+                x: x1, y: y1, width: x2 - x1, height: y2 - y1);
+            final cropBytes = Uint8List.fromList(img.encodeJpg(crop, quality: 90));
+
+            try {
+              final results = await ApiService.scanSpine(cropBytes);
+              for (final r in results) {
+                if (seen.add(r.isbn)) allResults.add(r);
+              }
+            } on ApiException catch (e) {
+              // Individual crop failed (e.g. OCR found no text) — skip and continue
+              debugPrint('Crop scan failed: ${e.message}');
+            }
+          }
+        }
+      }
+
+      // Fallback: scan the full image if no boxes or all crops returned nothing
+      if (allResults.isEmpty) {
+        allResults = await ApiService.scanSpine(imageBytes);
+      }
 
       if (!mounted) return;
 
-      if (results.isEmpty) {
+      if (allResults.isEmpty) {
         _showError('No matching book found. Try a clearer photo.');
         return;
       }
@@ -194,7 +254,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => BookResultSheet(book: results.first),
+        builder: (_) => BookResultSheet(book: allResults.first),
       );
     } on ApiException catch (e) {
       if (mounted) _showError(e.message);
@@ -204,6 +264,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       if (mounted) setState(() => _isSearching = false);
     }
   }
+
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(

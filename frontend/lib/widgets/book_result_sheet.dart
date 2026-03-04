@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shelf_scanner/api/api_service.dart';
+import 'package:shelf_scanner/services/liked_books_store.dart';
 
 /// Draggable bottom sheet showing a detected book's details
 /// and a "Similar Books" recommendations list.
@@ -78,11 +79,27 @@ class _BookResultSheetState extends State<BookResultSheet> {
                 Text(
                   widget.book.description,
                   style: Theme.of(context).textTheme.bodyMedium,
-                  maxLines: 6,
+                  maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 4),
               ],
+              // ── View full details ─────────────────────────────────────────
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: const Text('View Full Details'),
+                  onPressed: () {
+                    Navigator.pop(context); // close sheet first
+                    Navigator.pushNamed(
+                      context,
+                      '/book-detail',
+                      arguments: widget.book,
+                    );
+                  },
+                ),
+              ),
               _ActionRow(book: widget.book, userId: widget.userId),
               const SizedBox(height: 20),
               const _SectionLabel('Similar Books'),
@@ -227,10 +244,33 @@ class _PlaceholderCover extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
+class _ActionRow extends StatefulWidget {
   final BookResult book;
   final String? userId;
   const _ActionRow({required this.book, this.userId});
+
+  @override
+  State<_ActionRow> createState() => _ActionRowState();
+}
+
+class _ActionRowState extends State<_ActionRow> {
+  bool get _liked => LikedBooksStore.instance.isLiked(widget.book.isbn);
+
+  void _toggleLike() {
+    LikedBooksStore.instance.toggle(widget.book);
+    ApiService.logFeedback(widget.book.isbn, _liked ? 'like' : 'unlike',
+        userId: widget.userId);
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_liked
+            ? '❤️ Added to your library!'
+            : 'Removed from your library'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -238,14 +278,12 @@ class _ActionRow extends StatelessWidget {
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            icon: const Icon(Icons.favorite_outline),
-            label: const Text('Like'),
-            onPressed: () {
-              ApiService.logFeedback(book.isbn, 'like', userId: userId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Added to your library!')),
-              );
-            },
+            icon: Icon(_liked ? Icons.favorite : Icons.favorite_outline),
+            label: Text(_liked ? 'Liked' : 'Like'),
+            style: _liked
+                ? OutlinedButton.styleFrom(foregroundColor: Colors.pinkAccent)
+                : null,
+            onPressed: _toggleLike,
           ),
         ),
         const SizedBox(width: 12),
@@ -254,9 +292,8 @@ class _ActionRow extends StatelessWidget {
             icon: const Icon(Icons.share),
             label: const Text('Share'),
             onPressed: () {
-              // Share logic placeholder
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Sharing: ${book.title}')),
+                SnackBar(content: Text('Sharing: ${widget.book.title}')),
               );
             },
           ),
@@ -265,6 +302,7 @@ class _ActionRow extends StatelessWidget {
     );
   }
 }
+
 
 class _RecommendationsList extends StatelessWidget {
   final List<BookResult> books;

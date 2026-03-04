@@ -1,10 +1,11 @@
 """
 ShelfScanner — Text Recognition Service (PaddleOCR)
 Refactored to accept raw image bytes (API-friendly).
-Previously: only worked as a script with file paths.
 """
 import io
 import logging
+import threading
+
 import numpy as np
 from PIL import Image
 from paddleocr import PaddleOCR
@@ -12,22 +13,25 @@ from paddleocr import PaddleOCR
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# OCR engine — loaded once as module-level singleton
+# OCR engine — loaded once, protected by a lock so two uvicorn workers
+# don't download the same model files simultaneously.
 # ---------------------------------------------------------------------------
 _ocr: PaddleOCR | None = None
+_ocr_lock = threading.Lock()
 
 
 def get_ocr() -> PaddleOCR:
     global _ocr
     if _ocr is None:
-        logger.info("Initialising PaddleOCR engine …")
-        _ocr = PaddleOCR(
-            use_doc_orientation_classify=True,
-            use_doc_unwarping=True,
-            use_textline_orientation=True,
-            lang="en",
-        )
-        logger.info("PaddleOCR ready.")
+        with _ocr_lock:
+            if _ocr is None:          # double-checked locking
+                logger.info("Initialising PaddleOCR engine …")
+                _ocr = PaddleOCR(
+                    use_angle_cls=False,  # faster; angle classification not needed for spines
+                    lang="en",
+                    show_log=False,
+                )
+                logger.info("PaddleOCR ready.")
     return _ocr
 
 
@@ -47,21 +51,26 @@ def extract_text_from_bytes(image_bytes: bytes) -> dict:
     """
     ocr = get_ocr()
 
-    # Convert bytes → numpy array (PaddleOCR v4 accepts ndarray)
+    # Convert bytes → numpy array
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img_np = np.array(img)
 
-    results = ocr.predict(img_np)
+    # PaddleOCR ≤ 2.x API: ocr.ocr(img) returns list-of-pages.
+    # Each page: list of [polygon_box, (text, score)]
+    raw = ocr.ocr(img_np, cls=False)
 
     rec_texts, rec_boxes, rec_scores = [], [], []
-    for res in results:
-        for text, box, score in zip(
-            res.get("rec_texts", []),
-            res.get("rec_boxes", []),
-            res.get("rec_scores", []),
-        ):
+
+    if raw and raw[0]:          # raw[0] = first (only) page
+        for line in raw[0]:
+            if line is None:
+                continue
+            box, (text, score) = line
+            # Flatten quad polygon → axis-aligned [x1,y1,x2,y2]
+            xs = [p[0] for p in box]
+            ys = [p[1] for p in box]
             rec_texts.append(text)
-            rec_boxes.append(box)
+            rec_boxes.append([min(xs), min(ys), max(xs), max(ys)])
             rec_scores.append(float(score))
 
     return {

@@ -3,7 +3,6 @@ import 'package:shelf_scanner/widgets/home.dart';
 import 'package:shelf_scanner/widgets/settings.dart';
 import 'package:shelf_scanner/widgets/library.dart';
 import 'package:shelf_scanner/widgets/profile.dart';
-// import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,65 +12,92 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<Widget> _screens = [
-    const Home(),
-    const Settings(),
-    const Library(),
-    const Profile()
-  ];
-  int _selectedScreen = 0;
+  int _selectedIndex = 0;
 
-  Widget _icons(
-    IconData icon,
-    int index,
-  ) {
-    final selected = _selectedScreen == index;
-    return IconButton(
-      onPressed: () => setState(() => _selectedScreen = index),
-      icon: Icon(
-        icon,
-        color: selected
-            ? Theme.of(context).primaryColor
-            : Theme.of(context).primaryColorLight,
-      ),
-    );
-  }
+  static const _screens = [
+    Home(),
+    Library(),
+    Profile(),
+    Settings(),
+  ];
+
+  static const _labels = ['Home', 'Library', 'Profile', 'Settings'];
+
+  static const _icons = [
+    Icons.home_rounded,
+    Icons.local_library_rounded,
+    Icons.person_rounded,
+    Icons.settings_rounded,
+  ];
+
+  static const _activeIcons = [
+    Icons.home_rounded,
+    Icons.local_library_rounded,
+    Icons.person_rounded,
+    Icons.settings_rounded,
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text(
-          'BookShelf Scanner',
-          style: TextStyle(fontSize: 32, color: Colors.white),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-      ),
-      body: _screens[_selectedScreen],
-      bottomNavigationBar: BottomAppBar(
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: <Widget>[
-              _icons(Icons.home, 0),
-              _icons(Icons.settings_sharp, 1),
-              FloatingActionButton(
-                onPressed: () {
-                  setState(() {
-                    Navigator.pushNamed(context, '/live');
-                  });
-                },
-                child: const Icon(
-                  Icons.camera_alt,
-                ),
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            Icon(Icons.auto_stories, color: cs.primary, size: 26),
+            const SizedBox(width: 8),
+            Text(
+              _labels[_selectedIndex],
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
               ),
-              _icons(Icons.local_library_rounded, 2),
-              _icons(Icons.person, 3),
-            ],
+            ),
+          ],
+        ),
+        actions: [
+          // Camera shortcut in top-right
+          IconButton(
+            icon: Icon(Icons.camera_alt_rounded, color: cs.primary),
+            tooltip: 'Scan a shelf',
+            onPressed: () => Navigator.pushNamed(context, '/live'),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        indicatorColor: cs.primaryContainer,
+        destinations: List.generate(
+          _labels.length,
+          (i) => NavigationDestination(
+            icon: Icon(_icons[i]),
+            selectedIcon: Icon(_activeIcons[i], color: cs.onPrimaryContainer),
+            label: _labels[i],
           ),
         ),
       ),
+      // Centre FAB for scanning
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.pushNamed(context, '/live'),
+        backgroundColor: cs.primary,
+        foregroundColor: cs.onPrimary,
+        tooltip: 'Scan the Shelf',
+        child: const Icon(Icons.camera_alt_rounded),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 }

@@ -4,6 +4,8 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>We need camera access to scan your bookshelf</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is required by the camera session to enable video recording.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to save photos to your gallery.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
@@ -51,5 +53,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Disable Impeller (Flutter's Metal renderer) — Impeller initializes Metal
+	     on a background GCD thread at launch which causes abort on some devices -->
+	<key>FLTEnableImpeller</key>
+	<false/>
 </dict>
 </plist>

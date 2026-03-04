@@ -3,12 +3,15 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 // ── Base URL config ──────────────────────────────────────────────────────────
-// Android emulator  → 10.0.2.2 reaches the host machine's localhost
-// Physical device   → replace with your computer's LAN IP (e.g. 192.168.1.10)
+// Android emulator  → use 10.0.2.2:8000 (emulator localhost alias)
+// Physical device   → use your Mac's LAN IP so the phone can reach it over WiFi
+//                     Run: `ipconfig getifaddr en0` on your Mac to get it.
 // Production        → set to your deployed API URL
+//
+// Pass via: flutter run --dart-define=API_BASE_URL=http://192.168.1.113:8000
 const String _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8000',
+  defaultValue: 'http://192.168.1.113:8000', // Mac LAN IP — run `ipconfig getifaddr en0` to confirm
 );
 
 // ── Data models ─────────────────────────────────────────────────────────────
@@ -63,11 +66,60 @@ class BookResult {
   }
 }
 
+// ── PersonalisedMatch ────────────────────────────────────────────────────────
+
+class ThemeMatch {
+  final List<String> sharedCategories;
+  final double overlapScore;
+  const ThemeMatch({required this.sharedCategories, required this.overlapScore});
+
+  factory ThemeMatch.fromJson(Map<String, dynamic> j) => ThemeMatch(
+        sharedCategories: (j['shared_categories'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+        overlapScore: (j['overlap_score'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+class MatchResult {
+  final String isbn;
+  final double fitScore;          // 0.0 – 1.0 (NLP cosine similarity)
+  final String confidence;        // "high" | "medium" | "low"
+  final String whyYouLikeIt;     // NLP-generated sentence
+  final ThemeMatch themeMatch;
+  final BookResult? topSimilarLiked;
+
+  const MatchResult({
+    required this.isbn,
+    required this.fitScore,
+    required this.confidence,
+    required this.whyYouLikeIt,
+    required this.themeMatch,
+    this.topSimilarLiked,
+  });
+
+  factory MatchResult.fromJson(Map<String, dynamic> j) => MatchResult(
+        isbn: j['isbn'] as String,
+        fitScore: (j['fit_score'] as num).toDouble(),
+        confidence: j['confidence'] as String,
+        whyYouLikeIt: j['why_you_like_it'] as String,
+        themeMatch: ThemeMatch.fromJson(
+            j['theme_match'] as Map<String, dynamic>),
+        topSimilarLiked: j['top_similar_liked'] != null
+            ? BookResult.fromJson(
+                j['top_similar_liked'] as Map<String, dynamic>)
+            : null,
+      );
+}
+
+
 // ── API Service ──────────────────────────────────────────────────────────────
 
 class ApiService {
   static final _client = http.Client();
-  static const _timeout = Duration(seconds: 20);
+  static const _timeout = Duration(seconds: 30);         // normal endpoints
+  static const _scanTimeout = Duration(seconds: 120);    // /scan: first request downloads PaddleOCR models (~60s)
 
   // ── POST /scan ─────────────────────────────────────────────────────────────
   /// Send raw image bytes of a detected book spine to the backend.
@@ -87,13 +139,40 @@ class ApiService {
           headers: {'Content-Type': 'application/json'},
           body: body,
         )
-        .timeout(_timeout);
+        .timeout(_scanTimeout);
 
     _checkStatus(response, '/scan');
     return _parseBookList(response.body);
   }
 
-  // ── POST /search ───────────────────────────────────────────────────────────
+  // ── POST /match ─────────────────────────────────────────────────────────────
+  /// Personalised fit score: cosine similarity between `isbn` and the user's
+  /// liked books' SBERT embeddings (computed server-side with pgvector).
+  static Future<MatchResult> matchBook(
+    String isbn,
+    List<String> likedIsbns, {
+    String? userId,
+  }) async {
+    final body = json.encode({
+      'isbn': isbn,
+      'liked_isbns': likedIsbns,
+      if (userId != null) 'user_id': userId,
+    });
+
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/match'),
+          headers: {'Content-Type': 'application/json'},
+          body: body,
+        )
+        .timeout(_timeout);
+
+    _checkStatus(response, '/match');
+    return MatchResult.fromJson(
+        json.decode(response.body) as Map<String, dynamic>);
+  }
+
+
   /// Search by OCR text string (title + author). Used when text is
   /// already extracted on-device.
   static Future<List<BookResult>> search(
@@ -160,7 +239,7 @@ class ApiService {
           body: body,
         )
         .timeout(_timeout)
-        .catchError((e) => null);
+        .ignore();
   }
 
   // ── GET /metadata/{isbn} ───────────────────────────────────────────────────

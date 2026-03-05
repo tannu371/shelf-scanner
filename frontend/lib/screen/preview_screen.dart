@@ -6,7 +6,7 @@ import 'package:gal/gal.dart';
 import 'package:image/image.dart' as img;
 import 'package:shelf_scanner/api/api_service.dart';
 import 'package:shelf_scanner/services/yolo_service.dart';
-import 'package:shelf_scanner/widgets/book_result_sheet.dart';
+import 'package:shelf_scanner/screen/book_spine_detail_screen.dart';
 
 
 class PreviewScreen extends StatefulWidget {
@@ -52,7 +52,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         imageHeight: image.height,
         imageWidth: image.width,
         iouThreshold: 0.8,
-        confThreshold: 0.5);
+        confThreshold: 0.70); // raised from 0.5 — reduces false positives like keyboards
     if (result.isNotEmpty) {
       setState(() {
         yoloResults = result;
@@ -168,32 +168,25 @@ class _PreviewScreenState extends State<PreviewScreen> {
             ),
           ),
       ]),
-      bottomNavigationBar: Row(
-        children: [
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Expanded(
-              child: ElevatedButton.icon(
-                icon: _isSearching
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.black),
-                      )
-                    : const Icon(Icons.auto_awesome),
-                label: Text(_isSearching ? 'Searching…' : 'Get Recommendation'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                ),
-                onPressed: _isSearching ? null : _getRecommendation,
-              ),
-            ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
+        child: ElevatedButton.icon(
+          icon: _isSearching
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black),
+                )
+              : const Icon(Icons.auto_awesome),
+          label: Text(_isSearching ? 'Searching…' : 'Get Recommendation'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            minimumSize: const Size.fromHeight(48),
           ),
-          const Spacer(),
-        ],
+          onPressed: _isSearching ? null : _getRecommendation,
+        ),
       ),
     );
   }
@@ -205,14 +198,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
     try {
       final imageBytes = await File(widget.imageFile.path).readAsBytes();
 
-      List<BookResult> allResults = [];
+      // Each entry = one detected spine's crop bytes + its book result.
+      final List<SpineEntry> entries = [];
+      // Track ISBNs globally so the same book doesn't appear in two cards.
+      final seen = <String>{};
 
       if (yoloResults.isNotEmpty) {
         // Crop each detected spine and scan individually so PaddleOCR
         // receives a clean single-spine image (not a multi-spine shelf photo).
         final decoded = img.decodeImage(imageBytes);
         if (decoded != null) {
-          final seen = <String>{};
           for (final box in yoloResults) {
             // box[0]=x1, [1]=y1, [2]=x2, [3]=y2 in original image pixels
             final x1 = (box['box'][0] as double).clamp(0.0, imageWidth - 1).toInt();
@@ -226,35 +221,39 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
             try {
               final results = await ApiService.scanSpine(cropBytes);
-              for (final r in results) {
-                if (seen.add(r.isbn)) allResults.add(r);
+              // Take only the top-1 match per spine crop → 3 spines = 3 cards.
+              if (results.isNotEmpty && seen.add(results.first.isbn)) {
+                entries.add(SpineEntry(book: results.first, spineBytes: cropBytes));
               }
             } on ApiException catch (e) {
-              // Individual crop failed (e.g. OCR found no text) — skip and continue
               debugPrint('Crop scan failed: ${e.message}');
             }
           }
         }
       }
 
-      // Fallback: scan the full image if no boxes or all crops returned nothing
-      if (allResults.isEmpty) {
-        allResults = await ApiService.scanSpine(imageBytes);
+      // Fallback: scan the full image if no crops produced results.
+      if (entries.isEmpty) {
+        final results = await ApiService.scanSpine(imageBytes);
+        for (final r in results) {
+          if (seen.add(r.isbn)) {
+            entries.add(SpineEntry(book: r)); // no crop bytes for full-image scan
+          }
+        }
       }
 
       if (!mounted) return;
 
-      if (allResults.isEmpty) {
+      if (entries.isEmpty) {
         _showError('No matching book found. Try a clearer photo.');
         return;
       }
 
-      // Show the first (best) match — user can scroll to similar books inside
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => BookResultSheet(book: allResults.first),
+      // Navigate — pass the full list so the detail screen shows every spine.
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BookSpineDetailScreen(entries: entries),
+        ),
       );
     } on ApiException catch (e) {
       if (mounted) _showError(e.message);

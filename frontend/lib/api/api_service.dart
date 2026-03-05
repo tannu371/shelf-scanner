@@ -1,6 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:shelf_scanner/models/book_result.dart';
+import 'package:shelf_scanner/models/match_result.dart';
+
+// Re-export models so existing imports like:
+//   import 'package:shelf_scanner/api/api_service.dart' show BookResult, SpineEntry;
+// continue to work with zero changes in the rest of the codebase.
+export 'package:shelf_scanner/models/book_result.dart';
+export 'package:shelf_scanner/models/spine_entry.dart';
+export 'package:shelf_scanner/models/match_result.dart';
 
 // ── Base URL config ──────────────────────────────────────────────────────────
 // Android emulator  → use 10.0.2.2:8000 (emulator localhost alias)
@@ -13,106 +22,6 @@ const String _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://192.168.1.113:8000', // Mac LAN IP — run `ipconfig getifaddr en0` to confirm
 );
-
-// ── Data models ─────────────────────────────────────────────────────────────
-
-class BookResult {
-  final String isbn;
-  final String title;
-  final List<String> authors;
-  final String publisher;
-  final String year;
-  final String description;
-  final List<String> categories;
-  final String coverUrl;
-  final double? avgRating;
-  final int? ratingCount;
-  final double? matchScore;
-
-  const BookResult({
-    required this.isbn,
-    required this.title,
-    required this.authors,
-    required this.publisher,
-    required this.year,
-    required this.description,
-    required this.categories,
-    required this.coverUrl,
-    this.avgRating,
-    this.ratingCount,
-    this.matchScore,
-  });
-
-  factory BookResult.fromJson(Map<String, dynamic> json) {
-    return BookResult(
-      isbn: json['isbn'] as String? ?? '',
-      title: json['title'] as String? ?? 'Unknown Title',
-      authors: (json['authors'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
-      publisher: json['publisher'] as String? ?? '',
-      year: json['year'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      categories: (json['categories'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
-      coverUrl: json['cover_url'] as String? ?? '',
-      avgRating: (json['avg_rating'] as num?)?.toDouble(),
-      ratingCount: json['rating_count'] as int?,
-      matchScore: (json['match_score'] as num?)?.toDouble(),
-    );
-  }
-}
-
-// ── PersonalisedMatch ────────────────────────────────────────────────────────
-
-class ThemeMatch {
-  final List<String> sharedCategories;
-  final double overlapScore;
-  const ThemeMatch({required this.sharedCategories, required this.overlapScore});
-
-  factory ThemeMatch.fromJson(Map<String, dynamic> j) => ThemeMatch(
-        sharedCategories: (j['shared_categories'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            [],
-        overlapScore: (j['overlap_score'] as num?)?.toDouble() ?? 0,
-      );
-}
-
-class MatchResult {
-  final String isbn;
-  final double fitScore;          // 0.0 – 1.0 (NLP cosine similarity)
-  final String confidence;        // "high" | "medium" | "low"
-  final String whyYouLikeIt;     // NLP-generated sentence
-  final ThemeMatch themeMatch;
-  final BookResult? topSimilarLiked;
-
-  const MatchResult({
-    required this.isbn,
-    required this.fitScore,
-    required this.confidence,
-    required this.whyYouLikeIt,
-    required this.themeMatch,
-    this.topSimilarLiked,
-  });
-
-  factory MatchResult.fromJson(Map<String, dynamic> j) => MatchResult(
-        isbn: j['isbn'] as String,
-        fitScore: (j['fit_score'] as num).toDouble(),
-        confidence: j['confidence'] as String,
-        whyYouLikeIt: j['why_you_like_it'] as String,
-        themeMatch: ThemeMatch.fromJson(
-            j['theme_match'] as Map<String, dynamic>),
-        topSimilarLiked: j['top_similar_liked'] != null
-            ? BookResult.fromJson(
-                j['top_similar_liked'] as Map<String, dynamic>)
-            : null,
-      );
-}
-
 
 // ── API Service ──────────────────────────────────────────────────────────────
 
@@ -171,7 +80,6 @@ class ApiService {
     return MatchResult.fromJson(
         json.decode(response.body) as Map<String, dynamic>);
   }
-
 
   /// Search by OCR text string (title + author). Used when text is
   /// already extracted on-device.

@@ -55,7 +55,7 @@ class YoloService {
     double iouThreshold = 0.3,
     // Model already exports sigmoid-activated values in [0,1] — compare directly.
     // 0.5 cuts background (model outputs ~0.4-0.5 for empty areas).
-    double confThreshold = 0.25, // same as preview — diagnose first, tune later
+    double confThreshold = 0.8, // same as preview — diagnose first, tune later
     double classThreshold = 0.5,
   }) async {
     if (_interpreter == null) return [];

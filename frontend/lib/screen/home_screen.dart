@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shelf_scanner/services/yolo_service.dart';
 import 'package:shelf_scanner/widgets/home.dart';
 import 'package:shelf_scanner/widgets/settings.dart';
 import 'package:shelf_scanner/widgets/library.dart';
@@ -61,14 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        actions: [
-          // Camera shortcut in top-right
-          IconButton(
-            icon: Icon(Icons.camera_alt_rounded, color: cs.primary),
-            tooltip: 'Scan a shelf',
-            onPressed: () => Navigator.pushNamed(context, '/live'),
-          ),
-          const SizedBox(width: 4),
+        actions: const [
+          // Import an image from the gallery directly from the AppBar
+          _ImportButton(),
+          SizedBox(width: 4),
         ],
       ),
       body: IndexedStack(
@@ -89,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      // Centre FAB for scanning
+      // Centre FAB — camera (live scan)
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.pushNamed(context, '/live'),
         backgroundColor: cs.primary,
@@ -98,6 +97,104 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(Icons.camera_alt_rounded),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+    );
+  }
+}
+
+// ── Import button ─────────────────────────────────────────────────────────────
+
+/// AppBar action that lets the user pick a shelf photo from the gallery
+/// and feeds it through the same YOLO + recommendation pipeline as the camera.
+class _ImportButton extends StatefulWidget {
+  const _ImportButton();
+
+  @override
+  State<_ImportButton> createState() => _ImportButtonState();
+}
+
+class _ImportButtonState extends State<_ImportButton> {
+  final _picker = ImagePicker();
+  YoloService? _vision; // lazy — only created on first tap
+  bool _busy = false;
+
+  Future<void> _pickImage() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    try {
+      final file = await _picker.pickImage(source: ImageSource.gallery);
+      if (file == null || !mounted) return;
+
+      // Show loading indicator while model loads
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 14),
+                  Text('Loading model…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Lazily load the YOLO model once
+      _vision ??= YoloService();
+      await _vision!.loadModel(
+        modelPath: 'assets/models/yolov11-2.tflite',
+        numThreads: 2,
+        useGpu: false,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loader
+
+      await Navigator.pushNamed(
+        context,
+        '/preview',
+        arguments: {'imageFile': file, 'visionModel': _vision},
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // dismiss loader if open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e'),
+              behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return IconButton(
+      icon: _busy
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: cs.primary),
+            )
+          : SvgPicture.asset(
+              'assets/icons/gallery-import.svg',
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(cs.primary, BlendMode.srcIn),
+            ),
+      tooltip: 'Import from Gallery',
+      onPressed: _busy ? null : _pickImage,
     );
   }
 }

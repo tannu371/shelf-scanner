@@ -5,7 +5,8 @@ import 'package:shelf_scanner/screen/home_screen.dart';
 import 'package:shelf_scanner/screen/preview_screen.dart';
 import 'package:shelf_scanner/screen/live_detection_screen.dart';
 import 'package:shelf_scanner/screen/book_detail_screen.dart';
-import 'package:shelf_scanner/api/api_service.dart';
+import 'package:shelf_scanner/screen/book_spine_detail_screen.dart';
+import 'package:shelf_scanner/api/api_service.dart' show SpineEntry, BookResult;
 import 'package:shelf_scanner/services/theme_provider.dart';
 
 void main() async {
@@ -63,9 +64,17 @@ class MyApp extends StatelessWidget {
               );
             },
             '/book-detail': (context) {
-              final book =
-                  ModalRoute.of(context)!.settings.arguments as BookResult;
+              final book = ModalRoute.of(context)!.settings.arguments
+                  as BookResult;
               return BookDetailScreen(book: book);
+            },
+            '/book-spine-detail': (context) {
+              final args = ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+              return BookSpineDetailScreen(
+                entries: args['entries'] as List<SpineEntry>,
+                userId: args['userId'] as String?,
+              );
             },
           },
           title: 'BookShelf Scanner',

@@ -1,122 +1,111 @@
-# Quick Start Guide
-
-This guide will help you get the ShelfScanner application up and running quickly.
+# ShelfScanner — Quick Start
 
 ## Prerequisites
 
-### Backend
-- Python 3.10+
-- Conda (recommended) or pip
-- CUDA-compatible GPU (optional, for faster inference)
+| Requirement | Version |
+|---|---|
+| Flutter SDK | Latest stable (`flutter --version`) |
+| Python | 3.10+ |
+| Docker + Docker Compose | Latest |
+| Xcode (iOS) | 15+ |
+| Android Studio (Android) | Latest stable |
 
-### Frontend
-- Flutter SDK (latest stable version)
-- Android Studio / Xcode (for mobile development)
-- Chrome (for web development)
+---
 
-## Getting Started
-
-### 1. Backend Setup
+## Recommended: Full Stack with Docker
 
 ```bash
-# Navigate to backend directory
+# 1. Clone and enter the project
+git clone <repo-url> && cd shelf-scanner
+
+# 2. Configure environment
+cp backend/.env.example backend/.env
+# Open backend/.env and set GOOGLE_BOOKS_API_KEY
+
+# 3. Start everything (API + PostgreSQL + pgvector)
+docker compose up --build
+# → API docs: http://localhost:8000/docs
+
+# 4. Install Flutter deps
+cd frontend && flutter pub get
+
+# 5a. Run on Android emulator
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+
+# 5b. Run on physical iPhone (replace <udid> and <mac-ip>)
+flutter run -d <udid> --dart-define=API_BASE_URL=http://<mac-ip>:8000
+# Get your Mac's IP: ipconfig getifaddr en0
+```
+
+---
+
+## Local Backend (no Docker)
+
+```bash
 cd backend
-
-# Create conda environment
-conda create -n shelfscanner python=3.10 -y
-conda activate shelfscanner
-
-# Install dependencies
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run the backend server
-python app/main.py
+cp .env.example .env              # fill in GOOGLE_BOOKS_API_KEY
+uvicorn app.api.main:app --reload --port 8000
+# Requires PostgreSQL with pgvector extension
 ```
 
-The backend API will be available at `http://localhost:8000`
+---
 
-### 2. Frontend Setup
+## iOS Physical Device Checklist
+
+1. **Developer Mode** — iPhone Settings → Privacy & Security → Developer Mode → On
+2. **Trust Mac** — Settings → General → VPN & Device Management → Trust
+3. **Signing** — Xcode → Runner target → Signing & Capabilities → set your Apple ID team
+4. **API URL** — use your Mac's LAN IP, not `localhost` (the phone can't resolve Mac's localhost)
+
+---
+
+## Project Layout
+
+```
+shelf-scanner/
+├── backend/                # FastAPI · PaddleOCR · pgvector
+│   ├── app/api/endpoints/  # scan · recommend · match · feedback · books
+│   ├── db/schema.sql
+│   ├── Dockerfile
+│   └── requirements.txt
+└── frontend/               # Flutter (iOS + Android)
+    └── lib/
+        ├── models/         # BookResult · SpineEntry · MatchResult
+        ├── api/            # ApiService (HTTP client + model re-exports)
+        ├── services/       # YoloService · LikedBooksStore · ThemeProvider
+        ├── screen/         # HomeScreen · LiveDetection · Preview
+        │                   # BookSpineDetail (tabs) · BookDetail
+        └── widgets/
+            ├── spine_detail/  # SpineCard · SimilarSection (card/list toggle)
+            └── book_detail/   # HeroCover · PersonalisationCard · DecisionCard …
+```
+
+---
+
+## Useful Commands
 
 ```bash
-# Navigate to frontend directory
-cd frontend
+# Backend
+docker compose logs -f api                    # Live API logs
+docker compose exec api bash                  # Shell into container
+docker compose down -v && docker compose up --build  # Nuke & rebuild
 
-# Install Flutter dependencies
-flutter pub get
-
-# Run on your preferred platform
-flutter run  # Will prompt you to select a device
-
-# Or specify a platform:
-flutter run -d chrome        # Web
-flutter run -d macos         # macOS
-flutter run -d android       # Android
-flutter run -d ios           # iOS
+# Frontend
+flutter analyze --no-pub                      # Lint check (run before every flutter run)
+flutter pub get                               # After pubspec changes
+flutter clean && flutter pub get              # Nuclear option for build issues
 ```
 
-## Development Workflow
-
-### Backend Development
-
-1. Make changes to Python files in `backend/app/`
-2. The FastAPI server supports hot reload
-3. Test API endpoints using the interactive docs at `http://localhost:8000/docs`
-
-### Frontend Development
-
-1. Make changes to Dart files in `frontend/lib/`
-2. Flutter supports hot reload (press `r` in terminal or save file)
-3. Use Flutter DevTools for debugging
-
-## Project Structure
-
-```
-shelf-scanner-merged/
-├── backend/              # Python backend
-│   ├── app/             # Application code
-│   │   ├── api/         # API endpoints
-│   │   ├── services/    # Business logic
-│   │   └── models/      # ML models
-│   ├── data/            # Datasets
-│   └── requirements.txt # Python dependencies
-│
-└── frontend/            # Flutter frontend
-    ├── lib/            # Dart code
-    │   ├── api/        # API integration
-    │   ├── screen/     # App screens
-    │   └── widgets/    # UI components
-    ├── assets/         # Images, icons, models
-    └── pubspec.yaml    # Flutter dependencies
-```
+---
 
 ## Common Issues
 
-### Backend
-
-**Issue**: Module not found errors
-**Solution**: Make sure you've activated the conda environment and installed all dependencies
-
-**Issue**: CUDA errors
-**Solution**: The app will fall back to CPU if CUDA is not available
-
-### Frontend
-
-**Issue**: Flutter command not found
-**Solution**: Make sure Flutter is added to your PATH
-
-**Issue**: Build errors on iOS
-**Solution**: Run `pod install` in the `ios` directory
-
-**Issue**: Android build errors
-**Solution**: Make sure Android SDK is properly configured
-
-## Next Steps
-
-- Read the full documentation in `README.md`
-- Check backend API documentation at `backend/README.md`
-- Check frontend documentation at `frontend/README.md`
-- Explore the codebase and start contributing!
-
-## Support
-
-For issues and questions, please check the project documentation or create an issue in the repository.
+| Symptom | Fix |
+|---|---|
+| `API_BASE_URL` not set | Pass `--dart-define=API_BASE_URL=http://<ip>:8000` to `flutter run` |
+| iOS build fails — pods | `cd ios && pod install && cd ..` |
+| PaddleOCR slow on first request | First call downloads model weights; subsequent calls are fast |
+| YOLO model not found | Ensure `assets/models/yolov11-2.tflite` is declared in `pubspec.yaml` |
+| Camera permission denied | iOS: check `Info.plist` has `NSCameraUsageDescription` |

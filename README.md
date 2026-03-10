@@ -157,6 +157,54 @@ Controlled by `ThemeProvider` (`ValueNotifier<ThemeMode>` in `lib/services/`). T
 
 ---
 
+## Deployment
+
+### 📱 Android APK (Free)
+
+Build a release APK directly on macOS — no paid account needed:
+
+```bash
+cd frontend
+flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
+
+# Or split by CPU architecture (smaller files):
+flutter build apk --split-per-abi
+# Use app-arm64-v8a-release.apk for modern Android phones
+```
+
+**Install on device:** transfer the `.apk` to an Android phone, enable **Settings → Security → Install unknown apps**, then open the file.
+
+> The APK includes the bundled TFLite model (`yolov11-2.tflite`) and runs on-device inference with no internet required for detection.
+
+> **App Icon:** Custom bookshelf + magnifying glass icon (flat design, orange shelf with colourful spines). Configured via `flutter_launcher_icons` in `pubspec.yaml` — run `dart run flutter_launcher_icons` to regenerate all mipmap sizes from `assets/icons/app_icon.png`.
+
+---
+
+### 🍎 iOS — Free Sideload (Your Own Device Only)
+
+A free Apple ID is enough to install the app on **your own iPhone** via Xcode (certificate valid for 7 days):
+
+```bash
+cd frontend
+open ios/Runner.xcworkspace
+```
+
+In Xcode:
+1. **Signing & Capabilities → Team** → sign in with your free Apple ID
+2. Select your iPhone as the run target
+3. Press **▶ Run** — Xcode builds and installs on your device
+
+> ⚠️ Distributing to other iOS users requires a paid Apple Developer account ($99/year) for App Store or TestFlight. There is no free alternative for distributing `.ipa` files to arbitrary devices.
+
+---
+
+### 🌐 Flutter Web — Not Supported
+
+`flutter build web` fails because `tflite_flutter` uses `dart:ffi` (Foreign Function Interface) to call native TFLite C libraries. Web browsers do not support FFI. The same limitation applies to `camera`, `permission_handler`, and `gal`. Supporting web would require moving model inference to the backend and replacing all native APIs with browser equivalents — a significant refactor.
+
+---
+
 ## API Endpoints
 
 | Method | Path | Description |

@@ -2,7 +2,7 @@
 ShelfScanner — Embedding Service
 Loads SentenceTransformer once at startup for efficient inference.
 Generates 768-dim vectors for books (description + categories)
-and users (preference text).
+and book_users (preference text).
 """
 import os
 import logging

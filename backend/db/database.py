@@ -15,13 +15,17 @@ logger = logging.getLogger(__name__)
 # Build the connection string from environment variables
 # ---------------------------------------------------------------------------
 def _get_dsn() -> str:
-    return (
+    dsn = (
         f"host={os.getenv('DB_HOST', 'localhost')} "
         f"port={os.getenv('DB_PORT', '5432')} "
         f"dbname={os.getenv('DB_NAME', 'shelfscanner')} "
         f"user={os.getenv('DB_USER', 'postgres')} "
         f"password={os.getenv('DB_PASSWORD', 'postgres')}"
     )
+    sslmode = os.getenv('DB_SSLMODE', '')
+    if sslmode:
+        dsn += f" sslmode={sslmode}"
+    return dsn
 
 # ---------------------------------------------------------------------------
 # Global connection pool — initialised once at application startup

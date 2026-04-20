@@ -205,6 +205,50 @@ In Xcode:
 
 ---
 
+### ☁️ Cloud Deployment (Free) — Render + Neon
+
+Deploy the backend so the APK works anywhere (no LAN / same-WiFi requirement).
+
+**Why Render + Neon?** Render's free PostgreSQL doesn't support the `pgvector` extension. [Neon](https://neon.tech) provides free PostgreSQL **with pgvector built-in**.
+
+#### 1. Create a Neon Database (free)
+1. Sign up at [neon.tech](https://neon.tech) → create a project
+2. Create a database called `shelfscanner`
+3. Note your connection details: host, user, password
+4. Apply the schema:
+   ```bash
+   psql "postgresql://USER:PASS@HOST/shelfscanner?sslmode=require" -f backend/db/schema.sql
+   ```
+
+#### 2. Deploy Backend on Render (free)
+1. Push your repo to GitHub
+2. On [render.com](https://render.com) → **New → Web Service** → connect your repo
+3. Set **Root Directory** to `backend`
+4. **Build Command:** `pip install -r requirements.txt`
+5. **Start Command:** `uvicorn app.api.main:app --host 0.0.0.0 --port $PORT --workers 1`
+6. Add **Environment Variables:**
+   ```
+   DB_HOST=ep-xxx.us-east-2.aws.neon.tech
+   DB_PORT=5432
+   DB_NAME=shelfscanner
+   DB_USER=your_neon_user
+   DB_PASSWORD=your_neon_password
+   DB_SSLMODE=require
+   GOOGLE_BOOKS_API_KEY=your_key
+   SBERT_MODEL=sentence-transformers/all-mpnet-base-v2
+   ```
+
+#### 3. Rebuild the APK with the Render URL
+```bash
+cd frontend
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://your-app.onrender.com
+```
+
+> ⚠️ Render free tier spins down after 15 min of inactivity. The first request after spin-up takes ~30–60s (cold start + SBERT model load).
+
+---
+
 ## API Endpoints
 
 | Method | Path | Description |
@@ -221,7 +265,7 @@ In Xcode:
 
 ```
 books        — isbn, title, authors, embedding vector(768)  [HNSW cosine index]
-users        — user_id, preferences, embedding vector(768)
+book_users   — user_id, preferences, embedding vector(768)
 feedback_log — isbn, action, ocr_raw_text, spine_image_b64  [HITL pipeline]
 ```
 

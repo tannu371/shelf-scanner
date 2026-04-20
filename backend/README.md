@@ -109,8 +109,8 @@ books (isbn PK, title, authors[], categories[], description,
        avg_rating, rating_count, cover_url, publisher, year,
        embedding vector(768))   -- HNSW cosine index
 
--- users: taste profile per user
-users (user_id PK, preferences text[], embedding vector(768))
+-- book_users: taste profile per user
+book_users (user_id PK, preferences text[], embedding vector(768))
 
 -- feedback_log: HITL training data
 feedback_log (id, isbn, action, user_id, ocr_raw_text,

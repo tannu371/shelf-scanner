@@ -36,9 +36,9 @@ CREATE INDEX IF NOT EXISTS books_embedding_hnsw
     WITH (m = 16, ef_construction = 64);
 
 -- -------------------------------------------------------
--- Users table
+-- Book Users table
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS book_users (
     user_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     preferences  TEXT            DEFAULT '',    -- free-text preference description
     embedding    vector(768),                   -- NLP embedding of preferences
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS feedback_log (
     id              SERIAL PRIMARY KEY,
-    user_id         UUID            REFERENCES users(user_id) ON DELETE SET NULL,
+    user_id         UUID            REFERENCES book_users(user_id) ON DELETE SET NULL,
     isbn            TEXT            REFERENCES books(isbn) ON DELETE SET NULL,
     action          TEXT NOT NULL   CHECK (action IN ('confirm', 'like', 'skip')),
     ocr_raw_text    TEXT,           -- original OCR output (for model retraining)
